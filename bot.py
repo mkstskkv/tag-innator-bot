@@ -85,16 +85,25 @@ async def cmd_check_volume(message: Message):
     if message.chat.id != CHAT_ID:
         return
 
-    files = os.listdir(DATA_DIR)
-    file_size = os.path.getsize(DATA_FILE) if os.path.exists(DATA_FILE) else 0
+    try:
+        files = os.listdir(DATA_DIR)
+        file_exists = os.path.exists(DATA_FILE)
+        file_size = os.path.getsize(DATA_FILE) if file_exists else 0
 
-    text = f"📁 **Проверка Volume**\n\n"
-    text += f"Папка: `{DATA_DIR}`\n"
-    text += f"Файлы в папке: {files}\n"
-    text += f"Размер tag_data.json: {file_size / 1024:.1f} KB\n\n"
-    text += f"Путь к файлу: `{DATA_FILE}`"
+        text = (
+            f"📁 **Проверка Volume**\n\n"
+            f"Папка: {DATA_DIR}\n"
+            f"Файлы в папке: {files}\n"
+            f"Файл tag_data.json существует: {'✅ Да' if file_exists else '❌ Нет'}\n"
+            f"Размер файла: {file_size / 1024:.2f} KB\n"
+            f"Полный путь: {DATA_FILE}"
+        )
 
-    await message.answer(text, parse_mode="Markdown")
+        await message.answer(text, parse_mode="HTML")   # ← безопаснее всего
+        # или можно использовать MarkdownV2, но тогда нужно экранировать спецсимволы
+
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при проверке volume:\n{str(e)}")
 
 
 # ================== НАСТРОЙКА ОПРОСОВ ==================
@@ -230,6 +239,7 @@ async def main():
     me = await bot.get_me()
     print(f"🤖 Бот запущен: @{me.username} | ID: {me.id}")
     print(f"📁 Данные сохраняются в: {DATA_FILE}")
+    print(f"Содержимое /data: {os.listdir(DATA_DIR) if os.path.exists(DATA_DIR) else 'папка отсутствует'}")
     await dp.start_polling(bot)
 
 
