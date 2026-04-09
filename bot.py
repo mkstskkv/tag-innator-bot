@@ -6,8 +6,8 @@ from aiogram.filters import Command
 from aiogram.types import Message, PollAnswer
 
 # ================== НАСТРОЙКИ ==================
-TOKEN = os.getenv("TOKEN")          # ← Замени
-CHAT_ID = int(os.getenv("CHAT_ID"))                   # ← Твой ID группы                
+TOKEN = os.getenv("TOKEN")
+CHAT_ID = int(os.getenv("CHAT_ID"))
 
 if not TOKEN or not CHAT_ID:
     raise ValueError("Не заданы TOKEN или CHAT_ID!")
@@ -30,7 +30,7 @@ data = load_data()
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# === ВАРИАНТЫ (12 ролей — лимит Telegram) ===
+# === ВАРИАНТЫ ===
 EMPLOYMENT_OPTIONS = [
     "WrS — Есть работа [в штате студии]",
     "WrF — Есть работа [фрилансер]",
@@ -63,7 +63,8 @@ def build_tag(employment: str | None, roles: list[str]) -> str:
         tag += f"[{employment}]"
     if roles:
         tag += ",".join(roles)
-    return tag[:16]   # жёсткий лимит Telegram
+    return tag[:16]   # лимит Telegram
+
 
 # ================== НАСТРОЙКА ОПРОСОВ ==================
 @dp.message(Command("setup_tags"))
@@ -71,19 +72,18 @@ async def cmd_setup(message: Message):
     if message.chat.id != CHAT_ID:
         return await message.answer("❌ Только в основной группе")
 
-    # Получаем thread_id (если есть)
     thread_id = getattr(message, 'message_thread_id', None)
 
     try:
-        # === Опрос по занятости ===
+        # Опрос по занятости
         emp_poll = await bot.send_poll(
             chat_id=CHAT_ID,
-            message_thread_id=thread_id,
+            message_thread_id=thread_id,          # ← важно для топика
             question="📋 Ваша текущая занятость (выберите ОДИН вариант)",
             options=EMPLOYMENT_OPTIONS,
             is_anonymous=False,
             allows_multiple_answers=False,
-            # allows_revoting=True,   # ← УБРАТЬ или закомментировать
+            # allows_revoting=True   # можно раскомментировать после обновления aiogram
         )
 
         await bot.pin_chat_message(
@@ -93,15 +93,15 @@ async def cmd_setup(message: Message):
         )
         data["poll_employment_id"] = emp_poll.poll.id
 
-        # === Опрос по должностям ===
+        # Опрос по ролям
         role_poll = await bot.send_poll(
             chat_id=CHAT_ID,
-            message_thread_id=thread_id,
+            message_thread_id=thread_id,          # ← важно для топика
             question="🎨 Ваши должности (можно несколько)",
             options=ROLE_OPTIONS,
             is_anonymous=False,
             allows_multiple_answers=True,
-            # allows_revoting=True,   # ← УБРАТЬ или закомментировать
+            # allows_revoting=True
         )
 
         await bot.pin_chat_message(
@@ -113,21 +113,16 @@ async def cmd_setup(message: Message):
 
         save_data(data)
 
-        # Ответ без дублирования message_thread_id
         await message.answer(
             "✅ Опросы созданы **в этом топике**!\n\n"
-            "Голосуйте — список статусов будет обновляться автоматически.",
-            # message_thread_id=thread_id  # ← УБРАТЬ эту строку!
+            "Голосуйте — теги участников будут обновляться автоматически."
+            "Так же можно менять ответы, отозвав или дополнив голос в Опросах."
         )
-
-        await update_status_message(thread_id=thread_id)  # если функция существует
 
     except Exception as e:
         error_text = f"❌ Ошибка при создании опросов:\n{str(e)}"
-        # Здесь тоже без дублирования thread_id
         await message.answer(error_text)
-        # или если очень нужно:
-        # await message.answer(error_text, message_thread_id=thread_id)
+
 
 # ================== ОБРАБОТКА ГОЛОСОВАНИЯ ==================
 @dp.poll_answer()
@@ -152,9 +147,10 @@ async def on_poll_answer(poll_answer: PollAnswer):
 
     save_data(data)
 
-    # Пытаемся поставить тег
+    # Обновление тега
     tag = build_tag(votes.get("employment"), votes.get("roles", []))
     try:
+        # Современный способ (работает в aiogram >= 3.13)
         await bot.set_chat_member_tag(
             chat_id=CHAT_ID,
             user_id=user_id,
@@ -162,8 +158,8 @@ async def on_poll_answer(poll_answer: PollAnswer):
         )
         print(f"✅ Тег обновлён для {user_id}: {tag or '(пустой)'}")
     except Exception as e:
-        error_str = str(e)
-        print(f"❌ Ошибка тега для {user_id}: {error_str}")
+        print(f"❌ Ошибка тега для {user_id}: {e}")
+
 
 # ================== КОМАНДЫ ==================
 @dp.message(Command("check_rights"))
@@ -175,10 +171,11 @@ async def cmd_check_rights(message: Message):
         await message.answer(
             f"Статус: {member.status}\n"
             f"can_manage_tags: {getattr(member, 'can_manage_tags', False)}\n"
-            f"can_be_edited: {getattr(member, 'can_be_edited', False)}"
+            f"can_manage_chat: {getattr(member, 'can_manage_chat', False)}"
         )
     except Exception as e:
         await message.answer(f"Ошибка: {e}")
+
 
 @dp.message(Command("my_tag"))
 async def cmd_my_tag(message: Message):
@@ -197,6 +194,7 @@ async def cmd_my_tag(message: Message):
         parse_mode="HTML"
     )
 
+
 @dp.message(Command("refresh_all_tags"))
 async def cmd_refresh_all_tags(message: Message):
     if message.chat.id != CHAT_ID:
@@ -213,13 +211,14 @@ async def cmd_refresh_all_tags(message: Message):
                 tag=tag if tag else ""
             )
             count += 1
-        except:
-            pass
+        except Exception as e:
+            print(f"Ошибка при обновлении тега {uid_str}: {e}")
     await message.answer(f"✅ Обновлено тегов: {count}")
+
 
 # ================== ЗАПУСК ==================
 async def main():
-    print("🤖 Бот запущен. ID бота:", bot.id)
+    print("🤖 Бот запущен. ID бота:", (await bot.get_me()).id)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
