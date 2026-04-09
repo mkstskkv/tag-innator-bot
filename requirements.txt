@@ -1,1 +1,1 @@
-aiogram==message_thread_id
+aiogram==3.27.0
