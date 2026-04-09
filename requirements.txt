@@ -1,1 +1,1 @@
-aiogram==latest
+aiogram==message_thread_id
