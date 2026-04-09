@@ -71,7 +71,7 @@ async def cmd_setup(message: Message):
     if message.chat.id != CHAT_ID:
         return await message.answer("❌ Только в основной группе")
 
-    # Получаем ID топика (если команда вызвана в топике)
+    # Получаем thread_id (если есть)
     thread_id = getattr(message, 'message_thread_id', None)
 
     try:
@@ -83,10 +83,9 @@ async def cmd_setup(message: Message):
             options=EMPLOYMENT_OPTIONS,
             is_anonymous=False,
             allows_multiple_answers=False,
-            allows_revoting=True,
+            # allows_revoting=True,   # ← УБРАТЬ или закомментировать
         )
 
-        
         await bot.pin_chat_message(
             chat_id=CHAT_ID,
             message_id=emp_poll.message_id,
@@ -102,7 +101,7 @@ async def cmd_setup(message: Message):
             options=ROLE_OPTIONS,
             is_anonymous=False,
             allows_multiple_answers=True,
-            allows_revoting=True,
+            # allows_revoting=True,   # ← УБРАТЬ или закомментировать
         )
 
         await bot.pin_chat_message(
@@ -114,17 +113,21 @@ async def cmd_setup(message: Message):
 
         save_data(data)
 
+        # Ответ без дублирования message_thread_id
         await message.answer(
             "✅ Опросы созданы **в этом топике**!\n\n"
             "Голосуйте — список статусов будет обновляться автоматически.",
-            message_thread_id=thread_id
+            # message_thread_id=thread_id  # ← УБРАТЬ эту строку!
         )
 
-        await update_status_message(thread_id=thread_id)
+        await update_status_message(thread_id=thread_id)  # если функция существует
 
     except Exception as e:
         error_text = f"❌ Ошибка при создании опросов:\n{str(e)}"
-        await message.answer(error_text, message_thread_id=thread_id)
+        # Здесь тоже без дублирования thread_id
+        await message.answer(error_text)
+        # или если очень нужно:
+        # await message.answer(error_text, message_thread_id=thread_id)
 
 # ================== ОБРАБОТКА ГОЛОСОВАНИЯ ==================
 @dp.poll_answer()
